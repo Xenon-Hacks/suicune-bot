@@ -44,6 +44,7 @@ import cv2
 from vision import Capture, match_score
 import sprite_id
 import shared_frame
+import alarm
 import reset_menu
 import walk_menu
 import watch
@@ -398,7 +399,12 @@ def main():
                                    f"{result['species'].title()}, {result['score']:.2f}). "
                                    f"Screenshot: {picture}. Check it, then press ENTER "
                                    f"and the bot will soft-reset and keep going.")
+                    elapsed_min = (time.time() - start) / 60
+                    alert = alarm.notify(cfg, alarm.format_alert(
+                        kind, name if kind != "unknown" else result["species"].title(),
+                        encounters, time.time() - start), picture)
                     pause_for_user(pad, message)
+                    alert(0.5)
                     # Whatever's on screen now, the top of the loop soft-resets
                     # unconditionally -- so resuming is always safe here.
                     continue
