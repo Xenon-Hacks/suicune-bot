@@ -1,4 +1,22 @@
-# Suicune Shiny Hunter (Pokemon Crystal) -- V1
+# Suicune Shiny Hunter (Pokemon Crystal) -- V2
+
+## What's new in V2 (vs. V1)
+
+V1 ran 17 clean cycles at 29.0 s each:
+reset 1.3 s, menus to overworld 8.5 s, step 0.5 s, cutscene 16.9 s (fixed
+by the game), shiny check 2.0 s. V2 trims the parts the bot controls:
+
+- `RESET_GAP` 1.0 -> 0.5 s (reset_menu.py): A on the black boot screen
+  does nothing, so mashing starts sooner.
+- `MASH_INTERVAL` 0.35 -> 0.2 s (reset_menu.py): A every 0.35 s instead of
+  0.5 s. `MASH_HOLD` is unchanged, so presses aren't easier to lose.
+- `OVERWORLD_CONFIRM` 0.5 -> 0.25 s (walk_menu.py): every other screen
+  scored 0.00-0.08 against 0.75 in V1's log. The settle wait before the
+  step is unchanged.
+- Each encounter line now ends with a per-phase timing breakdown, e.g.
+  `(reset+menus 7.2s, step 0.5s, cutscene 16.9s, check 2.0s, cycle 27.4s)`.
+
+Nothing after the battle starts (the shiny check) changed.
 
 A variant of `static_encounter_bot_v1` for encounters that need **one step
 before the cutscene starts** (e.g. Suicune). The original static bot is

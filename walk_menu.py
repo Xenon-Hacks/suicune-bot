@@ -56,8 +56,12 @@ OVERWORLD_MATCH_THRESHOLD = 0.75  # watch the printed (overworld match: X.XX)
                                   # lines -- the saved spot should read well
                                   # above this, the title/CONTINUE screens
                                   # well below. Nudge it if it misfires.
-OVERWORLD_CONFIRM = 0.5      # the overworld must match on every look for
-                             # this long before the bot treats it as loaded
+OVERWORLD_CONFIRM = 0.25     # the overworld must match on every look for
+                             # this long before the bot treats it as loaded.
+                             # Was 0.5; in the log every non-overworld
+                             # screen scores 0.00-0.08 against 0.75, so a
+                             # shorter confirm can't mistake one. The
+                             # settle-still wait below is unchanged.
 OVERWORLD_SETTLE = 0.3       # then the screen must stay still this long
                              # (the map fade-in has finished, so the game
                              # is accepting input again)
