@@ -316,13 +316,17 @@ def main():
             try:
                 if wait_for_live_stream(pad):
                     reset_failures = 0
+                # Phase timestamps, printed once per encounter so the log
+                # shows where each cycle's time goes.
+                t_reset = time.time()
                 reset_menu.soft_reset(pad)
                 reached = walk_menu.mash_to_overworld(pad, cap, cfg, in_battle, _heartbeat)
-                ok = reached == "battle" or (
-                    reached == "overworld"
-                    and walk_menu.walk_up(pad, cap, _heartbeat)
-                    and reset_menu.mash_to_battle(pad, cap, cfg, in_battle, _heartbeat,
-                                                  timeout=walk_menu.CUTSCENE_TIMEOUT))
+                t_overworld = t_step = time.time()
+                ok = reached == "battle"
+                if reached == "overworld" and walk_menu.walk_up(pad, cap, _heartbeat):
+                    t_step = time.time()
+                    ok = reset_menu.mash_to_battle(pad, cap, cfg, in_battle, _heartbeat,
+                                                   timeout=walk_menu.CUTSCENE_TIMEOUT)
                 if not ok:
                     if wait_for_live_stream(pad):     # the real reason it failed
                         reset_failures = 0
@@ -353,6 +357,11 @@ def main():
                 print(f"[{elapsed_min:.1f} min] Encounter #{encounters}...", end=" ")
 
                 result, frame = settled_classification(cap, library, frame)
+                t_done = time.time()
+                timing = (f"(reset+menus {t_overworld - t_reset:.1f}s, step "
+                          f"{t_step - t_overworld:.1f}s, cutscene "
+                          f"{battle_seen_at - t_step:.1f}s, check "
+                          f"{t_done - battle_seen_at:.1f}s, cycle {t_done - t_reset:.1f}s)")
                 name = result["species"].title()
                 kind = result["verdict"]
                 if kind == "unknown":
@@ -360,7 +369,9 @@ def main():
                 seen[name] += 1
                 if kind == "normal":
                     print(f"{name} (#{seen[name]}), normal colours "
-                          f"(shiny-ness {result['position']:+.2f}). Resetting.")                    # No flee needed: the next loop iteration soft-resets right
+                          f"(shiny-ness {result['position']:+.2f}). Resetting.")
+                    print(f"  {timing}")
+                    # No flee needed: the next loop iteration soft-resets right
                     # back to the same save, one tile below the event.
                     continue
                 else:

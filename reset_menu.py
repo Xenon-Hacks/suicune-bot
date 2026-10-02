@@ -46,8 +46,11 @@ RESET_HOLD = 0.3           # A+B+SELECT+START must land as one combo --
                             # held longer than a normal menu tap since
                             # this goes out over UDP with no delivery
                             # guarantee (a partial combo does nothing).
-RESET_GAP = 1.0             # settle time after the combo, before the
-                            # first boot frame is expected
+RESET_GAP = 0.5             # settle time after the combo, before the
+                            # first boot frame is expected. Was 1.0; an A
+                            # pressed on the black boot screen does nothing,
+                            # so mashing can start sooner (suicune_bot
+                            # speed-up, 2026-10-02)
 RESET_RESEND = 8            # resend the held-combo packet often across
                             # the hold window -- the same reasoning as
                             # luma_input.tap()'s own `resend`, just with
@@ -55,7 +58,11 @@ RESET_RESEND = 8            # resend the held-combo packet often across
                             # starting the whole loop over
 MASH_HOLD = 0.15            # A's hold length while mashing through logos/
                             # title/continue/dialogue
-MASH_INTERVAL = 0.35        # gap between mashed A presses
+MASH_INTERVAL = 0.2         # gap between mashed A presses. Was 0.35: each
+                            # A-gated screen (copyright, title, CONTINUE,
+                            # save summary) waited up to a full press cycle
+                            # for the next A. MASH_HOLD is unchanged, so
+                            # presses aren't any easier to lose.
 MASH_TIMEOUT = 30.0         # ceiling for one boot-to-battle attempt.
                             # Traced against the pokecrystal decompile
                             # (github.com/pret/pokecrystal): with A held
