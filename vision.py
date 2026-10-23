@@ -1,13 +1,11 @@
 """
 vision.py
 
-Screen-capture based helpers for detecting battle transitions, the Ditto
-species, and shininess, used by sweet_scent_bot.py.
+Template-matching helpers (battle and overworld checks) used by
+suicune_bot.py. Shiny detection lives in shiny_flash.py.
 
-Everything here reads pixels off wherever the NTR Viewer window sits on
-YOUR screen (see calibrate.py) -- it does not talk to the NTR video stream
-protocol directly, so NTR Viewer needs to be visible (not minimized,
-not covered by another window) while the bot runs.
+Frames come from `cap.frame()` -- in practice shared_frame.SharedFrameCapture,
+which reads NTR-VC's shared memory, so NTR-VC can be minimised.
 """
 
 import time
