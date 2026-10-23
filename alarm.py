@@ -1,6 +1,6 @@
 """
-alarm.py -- tells your phone when the bot stops for a shiny (or a possible
-shiny / unrecognised Pokemon): a Discord message with the alert screenshot.
+alarm.py -- tells your phone when the bot stops for a shiny (or an
+encounter it couldn't tell): a Discord message with the alert screenshot.
 
 Setup: py alarm.py --setup saves "discord_webhook_url" to config.json
 (see README "Shiny alarm"). Messages start with @everyone so they notify
@@ -26,21 +26,28 @@ DISCORD_TIMEOUT = 20   # seconds for the webhook upload
 BOT_NAME = "Suicune Bot"   # the sender name shown in Discord
 
 
-def format_alert(kind, name, encounters, runtime_s, test=False):
+def format_alert(kind, name, encounters, runtime_s, detail="", test=False):
     """The alert text, laid out like the original mockup:
         ✨ **Shiny Suicune found!**
+        shiny flash: 5 inverted frame(s), ...
         Encounter #1,284 · 9h 12m of runtime
-        Bot is paused, waiting for you."""
+        Bot is paused, waiting for you.
+    kind: "shiny", or "unsure" when the bot couldn't tell; `detail` says
+    why."""
     title = {"shiny": f"✨ **Shiny {name} found!**",
-             "unsure": f"❓ **Possible shiny {name}!** Colours too close to call, "
-                       f"check it yourself.",
-             }.get(kind, f"❔ **Unrecognised Pokémon!** Closest match: {name}.")
+             }.get(kind, f"❓ **Possible shiny {name}!** The bot couldn't "
+                         f"tell, check it yourself.")
     h, m = divmod(int(runtime_s // 60), 60)
     runtime = f"{h}h {m}m" if h else f"{m}m"
+    lines = [title]
+    if detail:
+        lines.append(detail)
+    lines.append(f"Encounter #{encounters:,} · {runtime} of runtime")
     last = "Bot is paused, waiting for you."
     if test:
         last += " *(test alert -- no shiny, nothing paused)*"
-    return f"{title}\nEncounter #{encounters:,} · {runtime} of runtime\n{last}"
+    lines.append(last)
+    return "\n".join(lines)
 
 
 def _multipart(fields, files):

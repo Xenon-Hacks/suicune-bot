@@ -6,10 +6,15 @@ mash A through the boot logos, title screen and CONTINUE until the saved
 overworld is back -> one step UP -> mash A through the cutscene -> the
 battle starts.
 
-Species and shininess come from the reference sprites in the NORMAL and
-SHINY folders next to this script (see sprite_id.py) -- the same
-species-agnostic classifier used by the Sweet Scent bot. It also pauses
-if a Pokemon matches none of them.
+Shininess comes from the shiny animation, the same check as the Sweet
+Scent bot: a shiny wild Pokemon makes the battle field flash to a
+photo-negative for an instant before its HP box appears; a normal one
+doesn't (see shiny_flash.py). It also listens to NTR-VC's game audio for
+the shiny animation's sound (shine_sound.py); either check finding a
+shiny stops the bot. No Pokemon graphics are used. Suicune's battle is an
+ordinary wild battle to the game (pokecrystal: TinTower1F.asm loadwildmon
++ startbattle, BattleStartMessage's .wild branch), so the animation plays
+the same way. Battle Scene can be ON or OFF.
 
 Run calibrate.py first (it now also records the overworld start screen).
 Then:
@@ -30,7 +35,6 @@ Safety rules:
 """
 
 import argparse
-import collections
 import json
 import os
 import sys
@@ -41,9 +45,13 @@ import faulthandler
 from luma_input import Luma3DSInput, Button
 import cv2
 
-from vision import Capture, match_score
-import sprite_id
+from vision import match_score
+import gb_screen
+from frame_recorder import RecordingCapture
 import shared_frame
+import shine_sound
+import audio_recorder
+import shared_audio
 import alarm
 import reset_menu
 import walk_menu
@@ -109,38 +117,17 @@ def make_capture(cfg):
     return cap
 
 
-def load_sprites():
-    """The reference sprites: NORMAL and SHINY folders next to this script."""
-    base = os.path.dirname(os.path.abspath(__file__))
-    normal_dir, shiny_dir = sprite_id.find_sprite_folders(base)
-    if not normal_dir or not shiny_dir:
-        print(f"The NORMAL and SHINY sprite folders weren't found in {base}.\n"
-              f"Copy them over from your Sweet Scent/master bot folder (one "
-              f"PNG per species, the same file name in each) and start the "
-              f"bot again.")
-        sys.exit(1)
-    library = sprite_id.SpriteLibrary(normal_dir, shiny_dir)
-    if len(library.names) < 10:
-        print(f"Only {len(library.names)} species found in the NORMAL/SHINY "
-              f"folders (a file must exist in BOTH to count) -- check them.")
-        sys.exit(1)
-    return library
-
-
-EXTRA_LOOKS = 3            # re-checks before stopping on anything unusual
-EXTRA_LOOK_GAP = 1.2       # seconds between them
-
-
 def wait_until_fully_shown(cap, timeout=8.0):
     """Waits until the wild Pokemon is fully displayed: the battle text box
     has text in it ("Wild X appeared!" only prints once the sprite has
-    finished sliding in), and the text has finished printing (the screen
-    is still). Returns the frame to classify."""
+    finished sliding in, and after the shiny animation), and the text has
+    finished printing (the screen is still). By then every frame the shiny
+    flash could be in has been recorded. Returns the current frame."""
     end = time.time() + timeout
     while time.time() < end:
         _heartbeat()
         frame = cap.frame()
-        if sprite_id.battle_text_shown(sprite_id.to_native(frame)):
+        if gb_screen.battle_text_shown(gb_screen.native(frame)):
             still = watch.wait_still(cap, 0.5, 3.0, heartbeat=_heartbeat)
             return still if still is not None else cap.frame()
         time.sleep(0.05)
@@ -148,31 +135,81 @@ def wait_until_fully_shown(cap, timeout=8.0):
     return cap.frame()
 
 
-def settled_classification(cap, library, frame):
-    """Classifies the wild Pokemon, but never trusts a single unusual look.
-    A stalled stream can keep showing a frame from the middle of the
-    battle intro, which matches nothing. The game waits on "Wild X
-    appeared!" until A is pressed, so the bot can take its time: it looks
-    again (fresh, settled frames) up to EXTRA_LOOKS times and only
-    reports something unusual if every look agrees. Returns (result,
-    frame used)."""
-    result = sprite_id.classify(library, frame)
-    looks = 0
-    while result["verdict"] != "normal" and looks < EXTRA_LOOKS:
-        looks += 1
-        print(f"(looks {result['verdict']} -- checking again, {looks}/{EXTRA_LOOKS})",
-              end=" ", flush=True)
-        time.sleep(EXTRA_LOOK_GAP)
-        ntr_status.wait_for_good_quality(heartbeat=_heartbeat)
-        frame = wait_until_fully_shown(cap, timeout=4.0)
-        result = sprite_id.classify(library, frame)
-    return result, frame
+SHINE_SHINY = 0.11     # shine-sound match at or above this: shiny. Measured
+                       # by the Sweet Scent bot on the real 3DS over NTR-VC
+                       # shared audio: 35 forced shinies scored 0.12-0.23,
+                       # ~50,000 normal encounters never above 0.09 (with
+                       # the ordinary wild battle music, not Suicune's).
+                       # Over the PC-speaker path (--loopback) normals
+                       # reached 0.13, so that path can false-alarm.
+SHINE_NORMAL = 0.10    # below this (with live audio): normal, even when the
+                       # picture had gaps
+AUDIO_MIN_RMS = 0.002  # quieter than this, the audio is treated as missing
 
 
-def save_encounter_picture(frame, species, kind):
+def sound_check(audio, since):
+    """The shine-sound verdict for the audio recorded since `since`:
+    ("shiny" | "normal" | "unsure" | None, reason). None when there's no
+    usable audio (then the picture decides alone)."""
+    if audio is None:
+        return None, "sound check off"
+    if audio.error is not None:
+        return None, f"no audio ({audio.error})"
+    x = audio.since(since)
+    if len(x) < audio.sr * 2 or float(x.std()) < AUDIO_MIN_RMS:
+        if isinstance(audio, shared_audio.SharedAudioRecorder):
+            return None, ("no game audio heard (is NTR-VC's audio on in "
+                          "its Debug window: Audio (NTR-HR+)?)")
+        return None, ("no game audio heard (is NTR-VC's audio on, its "
+                      "volume above 0, and --audio-device right?)")
+    score, _at = shine_sound.best_match(x, audio.sr)
+    if score >= SHINE_SHINY:
+        return "shiny", f"shiny sound (match {score:.2f})"
+    if score < SHINE_NORMAL:
+        return "normal", f"no shiny sound (match {score:.2f})"
+    return "unsure", f"maybe the shiny sound (match {score:.2f})"
+
+
+def combine(flash, sound, sound_reason):
+    """One verdict from the flash check and the sound check. Either one
+    seeing a shiny is enough; a clear "no shiny sound" settles a picture
+    that had gaps."""
+    if flash["verdict"] == "shiny" or sound == "shiny":
+        return {"verdict": "shiny",
+                "reason": f"{flash['reason']}; {sound_reason}"}
+    if sound == "normal":
+        return {"verdict": "normal",
+                "reason": f"{sound_reason}; picture: {flash['reason']}"}
+    if sound == "unsure":
+        return {"verdict": "unsure", "reason": sound_reason}
+    return {"verdict": flash["verdict"],
+            "reason": f"{flash['reason']} ({sound_reason})"}
+
+
+def open_audio(args):
+    """NTR-VC's shared audio when the viewer shares it (volume and output
+    device don't matter), else the PC's speakers, else None."""
+    if not args.loopback and shared_audio.available(timeout=2.0):
+        audio = shared_audio.SharedAudioRecorder(keep_seconds=60.0)
+        print(f"Listening for the shiny sound on: {audio.device}")
+        return audio
+    if not args.loopback:
+        print("This NTR-VC doesn't share its audio (2.2.0 or later does); "
+              "listening to the PC's speakers instead.")
+    try:
+        audio = audio_recorder.AudioRecorder(args.audio_device, keep_seconds=60.0)
+        print(f"Listening for the shiny sound on: {audio.device}")
+        return audio
+    except Exception as e:
+        print(f"Can't record the PC's sound ({e}); using the shiny "
+              f"flash alone.")
+        return None
+
+
+def save_encounter_picture(frame, kind):
     """Keeps a screenshot of anything the bot stops for."""
     os.makedirs("alerts", exist_ok=True)
-    path = os.path.join("alerts", time.strftime(f"%Y%m%d_%H%M%S_{species}_{kind}.png"))
+    path = os.path.join("alerts", time.strftime(f"%Y%m%d_%H%M%S_{kind}.png"))
     cv2.imwrite(path, frame)
     return path
 
@@ -227,7 +264,7 @@ def _wait_for_enter(prompt):
         _heartbeat()
 
 
-def in_battle(cap: Capture, cfg: dict) -> bool:
+def in_battle(cap, cfg: dict) -> bool:
     """Also prints the raw match score every couple of seconds (even while
     mashing through the pre-battle screens) so a silent hang is visible/
     debuggable instead of a total black box -- if the score never gets
@@ -286,18 +323,31 @@ def main():
     parser.add_argument("--ip", required=True,
                          help="3DS IP address, shown in Rosalina's "
                               "InputRedirection screen")
+    parser.add_argument("--no-sound", action="store_true",
+                         help="don't listen for the shiny sound; use the "
+                              "shiny flash alone")
+    parser.add_argument("--audio-device",
+                         help="(only for an NTR-VC older than 2.2.0, without "
+                              "audio sharing): listen to this output device "
+                              "instead of the default speakers, e.g. "
+                              "\"Steam Streaming\" (see audio_recorder.py)")
+    parser.add_argument("--loopback", action="store_true",
+                         help="listen to the PC's speakers even if NTR-VC "
+                              "shares its audio")
     args = parser.parse_args()
     log_path = session_log.start(prefix="suicune")
     _disable_console_select_freeze()
     print(f"Logging this session to {log_path}")
 
     cfg = load_config()
-    cap = make_capture(cfg)
+    cap = RecordingCapture(make_capture(cfg))
     pad = Luma3DSInput(args.ip)
+    audio = None
+    if not args.no_sound:
+        audio = open_audio(args)
     watch.install(pad)       # presses from every code path take turns
-    library = load_sprites()
-    print(f"Loaded reference sprites for {len(library.names)} species "
-          f"(normal + shiny).")
+    print("Shiny check: watching for the shiny flash"
+          + (" and listening for the shiny sound." if audio else "."))
     print("Make sure your save is standing ONE tile below the tile that "
           "starts the cutscene, facing up, in the overworld, with no menu "
           "open. The bot will "
@@ -305,7 +355,6 @@ def main():
           "returns to.")
 
     encounters = 0
-    seen = collections.Counter()      # encounters per species
     reset_failures = 0
     start = time.time()
 
@@ -320,6 +369,7 @@ def main():
                 # Phase timestamps, printed once per encounter so the log
                 # shows where each cycle's time goes.
                 t_reset = time.time()
+                cap.clear()      # this attempt's frames only
                 reset_menu.soft_reset(pad)
                 reached = walk_menu.mash_to_overworld(pad, cap, cfg, in_battle, _heartbeat)
                 t_overworld = t_step = time.time()
@@ -357,57 +407,45 @@ def main():
                 elapsed_min = (time.time() - start) / 60
                 print(f"[{elapsed_min:.1f} min] Encounter #{encounters}...", end=" ")
 
-                result, frame = settled_classification(cap, library, frame)
+                # The sound check only hears from the step up on (the
+                # cutscene and the battle start), so the boot and title
+                # screen music can't confuse it.
+                sound, sound_reason = sound_check(
+                    audio, t_step if reached == "overworld" else t_reset)
+                result = combine(cap.analyse(), sound, sound_reason)
                 t_done = time.time()
                 timing = (f"(reset+menus {t_overworld - t_reset:.1f}s, step "
                           f"{t_step - t_overworld:.1f}s, cutscene "
                           f"{battle_seen_at - t_step:.1f}s, check "
                           f"{t_done - battle_seen_at:.1f}s, cycle {t_done - t_reset:.1f}s)")
-                name = result["species"].title()
                 kind = result["verdict"]
-                if kind == "unknown":
-                    name = "Unknown"
-                seen[name] += 1
                 if kind == "normal":
-                    print(f"{name} (#{seen[name]}), normal colours "
-                          f"(shiny-ness {result['position']:+.2f}). Resetting.")
+                    print(f"normal ({result['reason']}). Resetting.")
                     print(f"  {timing}")
                     # No flee needed: the next loop iteration soft-resets right
                     # back to the same save, one tile below the event.
                     continue
+                picture = save_encounter_picture(frame, kind)
+                if kind == "shiny":
+                    print(f"SHINY! ({result['reason']})")
+                    message = (f"SHINY! The shiny animation played "
+                               f"({result['reason']}). Take over now! "
+                               f"Screenshot: {picture}.")
                 else:
-                    picture = save_encounter_picture(frame, name.upper(), kind)
-                    if kind == "shiny":
-                        print(f"{name} -- SHINY!")
-                        message = (f"SHINY {name.upper()}! Its colours match the shiny "
-                                   f"sprite (x{1 / max(result['ratio'], 1e-6):.1f} closer "
-                                   f"than the normal one). Take over now! Screenshot: "
-                                   f"{picture}.")
-                    elif kind == "unsure":
-                        print(f"{name} -- colours too close to call, treating it "
-                              f"as a POSSIBLE SHINY.")
-                        message = (f"POSSIBLE SHINY {name.upper()} -- its colours are "
-                                   f"too close to call (shiny-ness {result['position']:+.2f}, "
-                                   f"0 = normal, 1 = shiny). Check it yourself. "
-                                   f"Screenshot: {picture}. If it's normal, press ENTER "
-                                   f"and the bot will soft-reset and keep going.")
-                    else:
-                        print(f"UNRECOGNISED Pokemon (closest: "
-                              f"{result['species'].title()}, match {result['score']:.2f}).")
-                        message = (f"UNRECOGNISED POKEMON -- it doesn't match any "
-                                   f"reference sprite well (closest: "
-                                   f"{result['species'].title()}, {result['score']:.2f}). "
-                                   f"Screenshot: {picture}. Check it, then press ENTER "
-                                   f"and the bot will soft-reset and keep going.")
-                    elapsed_min = (time.time() - start) / 60
-                    alert = alarm.notify(cfg, alarm.format_alert(
-                        kind, name if kind != "unknown" else result["species"].title(),
-                        encounters, time.time() - start), picture)
-                    pause_for_user(pad, message)
-                    alert(0.5)
-                    # Whatever's on screen now, the top of the loop soft-resets
-                    # unconditionally -- so resuming is always safe here.
-                    continue
+                    print(f"can't tell: {result['reason']}.")
+                    message = (f"COULDN'T TELL whether this one is shiny: "
+                               f"{result['reason']}. Check it yourself. "
+                               f"Screenshot: {picture}. If it's normal, press "
+                               f"ENTER and the bot will soft-reset and keep "
+                               f"going.")
+                alert = alarm.notify(cfg, alarm.format_alert(
+                    kind, "Suicune", encounters, time.time() - start,
+                    detail=result["reason"]), picture)
+                pause_for_user(pad, message)
+                alert(0.5)
+                # Whatever's on screen now, the top of the loop soft-resets
+                # unconditionally -- so resuming is always safe here.
+                continue
 
             except Exception:
                 # A transient hiccup here -- a dropped screen-capture frame,
@@ -415,7 +453,7 @@ def main():
                 # case on a blank or corrupt frame -- must never take the
                 # whole unattended run down. This isn't hypothetical: two
                 # different uncaught exceptions (mss.ScreenShotError: BitBlt
-                # access denied; a ValueError in sprite_id.find_game on a
+                # access denied; a ValueError in find_game on a
                 # degenerate frame) actually crashed the process overnight
                 # on 2026-09-28/29, sitting dead for hours until someone
                 # noticed and restarted it by hand. Log the full traceback
@@ -441,10 +479,11 @@ def main():
     except KeyboardInterrupt:
         elapsed_min = (time.time() - start) / 60
         print(f"\nStopped after {encounters} encounters in {elapsed_min:.1f} min.")
-        if seen:
-            print("By species: " + ", ".join(f"{n} {c}" for n, c in seen.most_common()))
     finally:
+        cap.close()
         pad.close()
+        if audio is not None:
+            audio.close()
 
 
 if __name__ == "__main__":

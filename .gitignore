@@ -12,3 +12,4 @@ __pycache__/
 *.mp4
 *.zip
 test_alert.png
+.pytest_cache/
