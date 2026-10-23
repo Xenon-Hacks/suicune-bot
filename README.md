@@ -49,6 +49,10 @@ confirmed on screen) and the reset combo.
 - New options: `--no-sound` (flash only), `--loopback` (listen to the PC's
   speakers even with a new NTR-VC), `--audio-device "<name>"` (which
   speakers, for an older NTR-VC).
+- `--no-reset` tests one encounter without a soft reset: start on the
+  saved spot, and the bot steps UP, goes through the cutscene, prints the
+  verdict and quits. It never presses SELECT (only the reset combo does),
+  so it works alongside a forced-shiny cheat that SELECT would disturb.
 - `tests/` checks the flash and sound detectors against simulated battle
   starts (no 3DS, ROM or graphics needed): `py -m pytest tests`.
 
@@ -221,11 +225,13 @@ false alarm. **Ctrl+C** quits.
 the sound didn't settle it. Check Suicune yourself.
 If it's normal, press ENTER.
 
-The sound thresholds were measured with the normal wild battle music,
-not Suicune's own battle theme. Watch the `match` numbers in the log for
-your first runs: normal encounters should stay well under 0.10. If they
-creep up to 0.10-0.11 the bot stops with COULDN'T TELL (or SHINY at 0.11+)
-instead of resetting, which is safe but worth reporting.
+Tested on a real 3DS over NTR-VC (2026-10-23): 2 of 2 forced shiny
+Suicunes stopped as SHINY (flash: all 5 inverted frames, correlation
+-0.95; sound 0.19 and 0.24, with No Skip Frame on and off), and 31 of 31
+normal Suicunes were reset (no flash, sound 0.05-0.07 with Suicune's own
+battle music). If normal encounters ever creep up to 0.10-0.11, the bot
+stops with COULDN'T TELL (or SHINY at 0.11+) instead of resetting, which
+is safe but worth reporting.
 
 It also pauses if the stream dies for 30 s (viewer closed, 3DS froze) or 3
 attempts in a row fail; it says why. Fix it and press ENTER.
