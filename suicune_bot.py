@@ -331,6 +331,12 @@ def main():
                               "audio sharing): listen to this output device "
                               "instead of the default speakers, e.g. "
                               "\"Steam Streaming\" (see audio_recorder.py)")
+    parser.add_argument("--no-reset", action="store_true",
+                         help="test one encounter without a soft reset (so "
+                              "SELECT is never pressed): start on the saved "
+                              "spot, the bot steps UP, goes through the "
+                              "cutscene, checks the battle, prints the "
+                              "verdict and quits")
     parser.add_argument("--loopback", action="store_true",
                          help="listen to the PC's speakers even if NTR-VC "
                               "shares its audio")
@@ -370,14 +376,20 @@ def main():
                 # shows where each cycle's time goes.
                 t_reset = time.time()
                 cap.clear()      # this attempt's frames only
-                reset_menu.soft_reset(pad)
-                reached = walk_menu.mash_to_overworld(pad, cap, cfg, in_battle, _heartbeat)
+                if args.no_reset:
+                    reached = "overworld"    # you're standing on the saved spot
+                else:
+                    reset_menu.soft_reset(pad)
+                    reached = walk_menu.mash_to_overworld(pad, cap, cfg, in_battle, _heartbeat)
                 t_overworld = t_step = time.time()
                 ok = reached == "battle"
                 if reached == "overworld" and walk_menu.walk_up(pad, cap, _heartbeat):
                     t_step = time.time()
                     ok = reset_menu.mash_to_battle(pad, cap, cfg, in_battle, _heartbeat,
                                                    timeout=walk_menu.CUTSCENE_TIMEOUT)
+                if not ok and args.no_reset:
+                    print("No battle reached (--no-reset test) -- stopping.")
+                    return
                 if not ok:
                     if wait_for_live_stream(pad):     # the real reason it failed
                         reset_failures = 0
@@ -419,6 +431,14 @@ def main():
                           f"{battle_seen_at - t_step:.1f}s, check "
                           f"{t_done - battle_seen_at:.1f}s, cycle {t_done - t_reset:.1f}s)")
                 kind = result["verdict"]
+                if args.no_reset:
+                    print(f"{kind.upper()} ({result['reason']})")
+                    print(f"  {timing}")
+                    if kind != "normal":
+                        save_encounter_picture(frame, kind)
+                    print("--no-reset test done, quitting (nothing was "
+                          "pressed after the battle started).")
+                    return
                 if kind == "normal":
                     print(f"normal ({result['reason']}). Resetting.")
                     print(f"  {timing}")
@@ -465,6 +485,8 @@ def main():
                       f"failed attempt and soft-resetting. Full traceback for "
                       f"diagnosis: ***")
                 traceback.print_exc()
+                if args.no_reset:
+                    return       # never soft-reset in the --no-reset test
                 time.sleep(TRANSIENT_ERROR_PAUSE)
                 reset_failures += 1
                 if reset_failures >= MAX_RESET_FAILURES:
