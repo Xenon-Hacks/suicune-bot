@@ -270,6 +270,12 @@ py -m pytest tests
 pictures, `logs/`, `alerts/` and `test_alert.png` are in `.gitignore`, so
 they're never uploaded.
 
+## License
+
+MIT, see [LICENSE](LICENSE). Pokemon and Nintendo 3DS are trademarks of
+their owners; this project isn't affiliated with them and contains no game
+code or graphics.
+
 ---
 
 ## How the shiny check works (what's new in V4)
