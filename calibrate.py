@@ -12,7 +12,7 @@ It needs two things:
   1. the battle indicator -- a spot that changes once the battle starts;
   2. the overworld start screen -- what your save loads into (outside the
      Tin Tower door), so the bot knows when to stop mashing A and step UP.
-Species/shininess use the NORMAL/SHINY sprite folders instead.
+Shininess needs no calibration (the shiny animation check, see README).
 
 Usage:
     py calibrate.py                  whatever isn't set yet (both, first time)

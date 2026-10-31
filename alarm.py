@@ -3,7 +3,7 @@ alarm.py -- tells your phone when the bot stops for a shiny (or an
 encounter it couldn't tell): a Discord message with the alert screenshot.
 
 Setup: py alarm.py --setup saves "discord_webhook_url" to config.json
-(see README "Shiny alarm"). Messages start with @everyone so they notify
+(see README "Discord alert"). Messages start with @everyone so they notify
 even on "Only @mentions" servers; "discord_ping_everyone": false turns that
 off. config.json is gitignored, so the URL never ends up on GitHub.
 Without it the bot pauses for a shiny exactly as before.

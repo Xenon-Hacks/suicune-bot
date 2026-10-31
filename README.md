@@ -1,4 +1,4 @@
-# Suicune Bot -- shiny Suicune hunter for Pokemon Crystal (3DS) -- V4
+# Suicune Bot -- shiny Suicune hunter for Pokemon Crystal (3DS)
 
 Soft-resets Pokemon Crystal on a 3DS over and over until Suicune is shiny,
 then stops and pings your phone on Discord with a picture of the battle.
@@ -18,78 +18,31 @@ Each attempt, about 27 s:
 The only buttons it ever presses are A, UP (only once the saved spot is
 confirmed on screen) and the reset combo.
 
-## What's new in V4: shiny check from the Sweet Scent bot, no sprites
-
-- **Shinies are spotted by the shiny animation, not by their colours**
-  (ported from the Sweet Scent bot v26). A shiny wild Pokemon plays the
-  shiny animation before "Wild SUICUNE appeared!": the battle field
-  flashes to a photo-negative for 5 frames, then sparkles circle it with
-  the SFX_SHINE sound. A normal one gets no animation. Suicune's battle is
-  an ordinary wild battle to the game (pokecrystal `maps/TinTower1F.asm`:
-  `loadwildmon` + `startbattle`; `BattleStartMessage` in
-  `engine/battle/core.asm`), so the animation plays the same way.
-- **Two checks, either one stops the bot:**
-  - the flash (`shiny_flash.py`), watched on every NTR-VC frame by a
-    background recorder (`frame_recorder.py`). It looks at the battle
-    field only, which is what the Game Boy Color actually inverts (the
-    Sweet Scent bot's v25 fix). On a real 3DS it caught 35 of 35 forced
-    shinies.
-  - the sound (`shine_sound.py`), read from NTR-VC's shared audio
-    (`shared_audio.py`, NTR-VC 2.2.0+) or, with an older viewer, the PC's
-    speakers (`audio_recorder.py`). It uses the thresholds measured on the
-    real 3DS for v26: 0.11+ is shiny, under 0.10 normal. The bot only
-    listens from the step UP on, so the title screen music is never
-    checked.
-- **If it can't tell, it stops.** Frames more than 75 ms apart while the
-  battle started, or the start of the battle not recorded, and no clear
-  "no shiny sound" either: it pauses with "COULDN'T TELL" and a
-  screenshot, the same as a possible shiny.
-- The `NORMAL/` and `SHINY/` sprite folders and `sprite_id.py` are gone;
-  nothing here contains any Pokemon graphics. Nothing new to calibrate.
-- New options: `--no-sound` (flash only), `--loopback` (listen to the PC's
-  speakers even with a new NTR-VC), `--audio-device "<name>"` (which
-  speakers, for an older NTR-VC).
-- `--no-reset` tests one encounter without a soft reset: start on the
-  saved spot, and the bot steps UP, goes through the cutscene, prints the
-  verdict and quits. It never presses SELECT (only the reset combo does),
-  so it works alongside a forced-shiny cheat that SELECT would disturb.
-- `tests/` checks the flash and sound detectors against simulated battle
-  starts (no 3DS, ROM or graphics needed): `py -m pytest tests`.
-
-V3 (Discord alert), V2 and V1 are tagged `v3`, `v2` and `v1`.
-
-## What's new in V3
-
-- **Discord shiny alert.** When the bot stops it posts, as "Suicune Bot":
-
-  > ✨ **Shiny Suicune found!**
-  > Encounter #1,284 · 9h 12m of runtime
-  > Bot is paused, waiting for you.
-  > @everyone
-  > *(the battle screenshot)*
-
-  The @everyone ping makes Discord notify you even when the server is set
-  to "Only @mentions". A failed upload never stops the bot from pausing.
-- `py alarm.py --setup` saves your webhook link (no file editing) and
-  sends a test; `py alarm.py --test` sends another test any time.
-- Setup instructions for new users (below).
-
-V2 (faster cycle: reset gap, A-mash pace, overworld confirm) and V1 are
-tagged `v2` and `v1` in this repo.
+This is version 4. How the shiny check works and what changed in each
+version are at the end of this page.
 
 ---
 
 ## What you need
 
-- A **3DS with Luma3DS** (custom firmware) and **Pokemon Crystal** (3DS
-  Virtual Console).
+- A **New 3DS, New 3DS XL or New 2DS XL** with **Luma3DS** (custom
+  firmware). The original 3DS, 3DS XL and 2DS **won't work**: NTR-HR,
+  which streams the picture to the PC, doesn't support them.
+- **NTR-HR** on the 3DS, for streaming the screen and sound to the PC.
+  If you've never set it up, follow the
+  [3DS wireless streaming guide](https://wiki.hacks.guide/wiki/3DS:Wireless_streaming)
+  and check you can see the game in a viewer before going on.
+- **Pokemon Crystal** (3DS Virtual Console).
 - A **Windows PC** on the same Wi-Fi as the 3DS.
 - **Python 3.10+** from https://www.python.org/downloads/ (tick "Add
   python.exe to PATH" in the installer).
-- The **frame-sharing NTR viewer** (`ntrviewer.exe` from the
-  [NTR-VC](https://github.com/Xenon-Hacks/NTR-VC) build). It hands the
-  game picture straight to the bot, so the viewer window can be minimised
-  or covered while the bot runs.
+- **NTR-VC 2.2.0 or later**, the frame-sharing NTR viewer: download
+  `NTR-VC-Win-x64.zip` from the
+  [NTR-VC releases page](https://github.com/Xenon-Hacks/NTR-VC/releases),
+  unzip it and run `ntrviewer.exe`. It hands the game picture and sound
+  straight to the bot, so the viewer window can be minimised or covered
+  while the bot runs. (The normal NTRViewer-HR doesn't do this, and the
+  bot can't use it.)
 - Optional: **Discord** on your phone, for the shiny alert.
 
 ## Setup (once)
@@ -108,9 +61,16 @@ py -m pip install -r requirements.txt
 
 ### 2. Turn on InputRedirection on the 3DS
 
-On the 3DS press **L + Down + SELECT** to open the Rosalina menu ->
-**Miscellaneous options** -> **Enable InputRedirection**. Note the **IP
-address** it shows (e.g. `192.168.x.x`) -- every command below needs it.
+This is how the bot presses buttons. On the 3DS press **L + Down +
+SELECT** to open the Rosalina menu -> **Miscellaneous options** ->
+**Start InputRedirection**. You need the 3DS's **IP address** (e.g.
+`192.168.x.x`) for every command below; it's the same address NTR-VC
+connects to (NTR-VC's Auto-Detect finds it). Wherever this page says
+`<3ds ip>`, type that address instead, without the `< >`.
+
+InputRedirection turns off when the 3DS restarts, so start it again
+after every reboot. Having it on also stops Pokemon games from freezing
+the stream when they load a save.
 
 Close InputRedirectionClient-Qt or any other input tool on the PC while
 the bot runs: two programs sending buttons at once makes presses land
@@ -118,7 +78,8 @@ twice or not at all.
 
 ### 3. Start the viewer
 
-Start the frame-sharing `ntrviewer.exe`, connect it to the 3DS, then:
+Start `ntrviewer.exe` (NTR-VC), put the 3DS's IP in **3DS IP** (or press
+Auto-Detect) and press **Connect**. Once you see the game, run:
 
 ```
 py test_shared_frame.py
@@ -126,8 +87,10 @@ py test_shared_frame.py
 
 It saves `shared_frame_test.png`. The game should be upright with black
 bars left and right. If it's sideways, try `py test_shared_frame.py
---rotation 0` (or 2, 3) and put the one that works in `config.json` as
-`"shared_rotation": N`.
+--rotation 0` (or 2, 3). When one comes out upright, make a file called
+`config.json` in the bot folder containing `{"shared_rotation": N}` (N is
+the number that worked), or add that line to it if it already exists.
+Most people never need this.
 
 Two NTR settings the shiny check needs:
 
@@ -143,9 +106,10 @@ Two NTR settings the shiny check needs:
 
 ### 4. Make your save
 
-In Crystal, with the Clear Bell, stand **right outside the Tin Tower door
-(Ecruteak City), facing up at the door**, and **save**. Every attempt
-starts from this save.
+In Crystal, with the Clear Bell and before you've battled Suicune, stand
+**right outside the Tin Tower door (Ecruteak City), facing up at the
+door**, and **save**. Every attempt starts from this save, so don't save
+again while hunting.
 
 ### 5. Calibrate
 
@@ -236,8 +200,33 @@ is safe but worth reporting.
 It also pauses if the stream dies for 30 s (viewer closed, 3DS froze) or 3
 attempts in a row fail; it says why. Fix it and press ENTER.
 
+Before leaving it alone for hours you can also check the shiny check
+itself on one encounter, without a soft reset: load your save so you're
+on the saved spot, then
+
+```
+py suicune_bot.py --ip <3ds ip> --no-reset
+```
+
+It steps UP, goes through the cutscene, prints NORMAL / SHINY /
+COULDN'T TELL and quits.
+
+Other options: `--no-sound` (flash check only), `--loopback` (listen to
+the PC's speakers even with a new NTR-VC), `--audio-device "<name>"`
+(which speakers, for an NTR-VC older than 2.2.0).
+
 ## Troubleshooting
 
+- **"No frames from the frame-sharing NTR ..."** -- NTR-VC isn't running or
+  isn't connected (or it's the normal NTRViewer-HR, which doesn't share
+  frames). Start NTR-VC, connect, and run `py test_shared_frame.py`.
+- **Buttons don't do anything** -- start InputRedirection again in the
+  Rosalina menu (it's off after every reboot) and check the IP.
+  `py luma_input.py <3ds ip>` presses A once as a quick test.
+- **The 3DS keeps holding buttons after the bot was closed** -- quit the
+  bot with Ctrl+C rather than closing its window. If buttons are stuck
+  anyway, `py luma_input.py <3ds ip>` hands them back to the 3DS (it
+  presses A once first).
 - **"config.json is still from the screen-capture setup"** -- run
   `py calibrate.py`.
 - **"Overworld never appeared"** -- watch the `(overworld match: X.XX)`
@@ -265,8 +254,81 @@ attempts in a row fail; it says why. Fix it and press ENTER.
 shiny-sound lines. `shiny_flash.py` holds the flash check's numbers;
 they're the Sweet Scent bot's, tested on the real game, so leave them.
 
+## Checking the detectors (optional)
+
+`tests/` checks the flash and sound detectors against simulated battle
+starts (no 3DS, ROM or graphics needed):
+
+```
+py -m pip install pytest
+py -m pytest tests
+```
+
 ## Files that stay on your PC
 
 `config.json` (your boxes and Discord link), the `ref_*.png` calibration
 pictures, `logs/`, `alerts/` and `test_alert.png` are in `.gitignore`, so
 they're never uploaded.
+
+---
+
+## How the shiny check works (what's new in V4)
+
+- **Shinies are spotted by the shiny animation, not by their colours**
+  (ported from the Sweet Scent bot v26). A shiny wild Pokemon plays the
+  shiny animation before "Wild SUICUNE appeared!": the battle field
+  flashes to a photo-negative for 5 frames, then sparkles circle it with
+  the SFX_SHINE sound. A normal one gets no animation. Suicune's battle is
+  an ordinary wild battle to the game (pokecrystal `maps/TinTower1F.asm`:
+  `loadwildmon` + `startbattle`; `BattleStartMessage` in
+  `engine/battle/core.asm`), so the animation plays the same way.
+- **Two checks, either one stops the bot:**
+  - the flash (`shiny_flash.py`), watched on every NTR-VC frame by a
+    background recorder (`frame_recorder.py`). It looks at the battle
+    field only, which is what the Game Boy Color actually inverts (the
+    Sweet Scent bot's v25 fix). On a real 3DS it caught 35 of 35 forced
+    shinies.
+  - the sound (`shine_sound.py`), read from NTR-VC's shared audio
+    (`shared_audio.py`, NTR-VC 2.2.0+) or, with an older viewer, the PC's
+    speakers (`audio_recorder.py`). It uses the thresholds measured on the
+    real 3DS for v26: 0.11+ is shiny, under 0.10 normal. The bot only
+    listens from the step UP on, so the title screen music is never
+    checked.
+- **If it can't tell, it stops.** Frames more than 75 ms apart while the
+  battle started, or the start of the battle not recorded, and no clear
+  "no shiny sound" either: it pauses with "COULDN'T TELL" and a
+  screenshot, the same as a possible shiny.
+- The `NORMAL/` and `SHINY/` sprite folders and `sprite_id.py` are gone;
+  nothing here contains any Pokemon graphics. Nothing new to calibrate.
+- New options: `--no-sound` (flash only), `--loopback` (listen to the PC's
+  speakers even with a new NTR-VC), `--audio-device "<name>"` (which
+  speakers, for an older NTR-VC).
+- `--no-reset` tests one encounter without a soft reset: start on the
+  saved spot, and the bot steps UP, goes through the cutscene, prints the
+  verdict and quits. It never presses SELECT (only the reset combo does),
+  so it works alongside a forced-shiny cheat that SELECT would disturb.
+- `tests/` checks the flash and sound detectors against simulated battle
+  starts (no 3DS, ROM or graphics needed): `py -m pytest tests`.
+
+V3 (Discord alert), V2 and V1 are tagged `v3`, `v2` and `v1`, for
+reference only: they used sprite pictures that aren't in this repo, so
+they don't run as they are. Use the latest version.
+
+## What was new in V3
+
+- **Discord shiny alert.** When the bot stops it posts, as "Suicune Bot":
+
+  > ✨ **Shiny Suicune found!**
+  > Encounter #1,284 · 9h 12m of runtime
+  > Bot is paused, waiting for you.
+  > @everyone
+  > *(the battle screenshot)*
+
+  The @everyone ping makes Discord notify you even when the server is set
+  to "Only @mentions". A failed upload never stops the bot from pausing.
+- `py alarm.py --setup` saves your webhook link (no file editing) and
+  sends a test; `py alarm.py --test` sends another test any time.
+- Setup instructions for new users.
+
+V2 (faster cycle: reset gap, A-mash pace, overworld confirm) and V1 are
+tagged `v2` and `v1` in this repo.
