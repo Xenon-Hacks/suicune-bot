@@ -28,15 +28,20 @@ version are at the end of this page.
 - A **New 3DS, New 3DS XL or New 2DS XL** with **Luma3DS** (custom
   firmware). The original 3DS, 3DS XL and 2DS **won't work**: NTR-HR,
   which streams the picture to the PC, doesn't support them.
-- **NTR-HR** on the 3DS, for streaming the screen and sound to the PC.
-  If you've never set it up, follow the
+- **[NTR-HR-VC](https://github.com/Xenon-Hacks/NTR-HR-VC)** on the 3DS,
+  for streaming the screen and sound to the PC. It's our build of NTR-HR
+  (a fork of [xzn/ntr-hr](https://github.com/xzn/ntr-hr)) with fixes for
+  stream drops during long runs and an SD card log; its
+  [changes page](https://github.com/Xenon-Hacks/NTR-HR-VC/blob/full-width/docs/NTR-HR-VC-CHANGES.md)
+  lists the builds. If you've never set up NTR-HR, follow the
   [3DS wireless streaming guide](https://wiki.hacks.guide/wiki/3DS:Wireless_streaming)
   and check you can see the game in a viewer before going on.
 - **Pokemon Crystal** (3DS Virtual Console).
 - A **Windows PC** on the same Wi-Fi as the 3DS.
 - **Python 3.10+** from https://www.python.org/downloads/ (tick "Add
   python.exe to PATH" in the installer).
-- **NTR-VC 2.2.0 or later**, the frame-sharing NTR viewer: download
+- **[NTR-VC](https://github.com/Xenon-Hacks/NTR-VC) 2.2.0 or later**, our
+  frame-sharing fork of [NTRViewer-HR](https://github.com/xzn/ntrviewer-hr): download
   `NTR-VC-Win-x64.zip` from the
   [NTR-VC releases page](https://github.com/Xenon-Hacks/NTR-VC/releases),
   unzip it and run `ntrviewer.exe`. It hands the game picture and sound
